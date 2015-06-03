@@ -17,8 +17,8 @@ META_DB_FILE = './meta_db.dump'
 CONFERENCE_FILE = '../data/Conference.csv'
 JOURNAL_FILE = '../data/Journal.csv'
 PAPER_FILE = '../data/Paper.csv'
-AUTHOR_FILE = '../data/Author.csv'
-PAPER_AUTHOR_FILE = '../data/PaperAuthor.csv'
+AUTHOR_FILE = './NormalizeAuthor.csv'
+PAPER_AUTHOR_FILE = './NormalizePaperAuthor.csv'
 
 # Cache
 FEATURE_DB_FILE = './feature_db.dump'
@@ -502,13 +502,13 @@ print('feature std: ', np.std(X, axis=0))
 # from sklearn.tree import DecisionTreeClassifier
 # classifier = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2), n_estimators=1000)
 
-# from sklearn.ensemble import RandomForestClassifier
-# classifier = RandomForestClassifier(n_estimators=1000,
-#                                     verbose=1)
+from sklearn.ensemble import RandomForestClassifier
+classifier = RandomForestClassifier(n_estimators=1000,
+                                    verbose=1)
 
-from sklearn.ensemble import GradientBoostingClassifier
-classifier = GradientBoostingClassifier(n_estimators=1000,
-                                        verbose=1)
+# from sklearn.ensemble import GradientBoostingClassifier
+# classifier = GradientBoostingClassifier(n_estimators=1000,
+#                                         verbose=1)
 
 classifier.fit(X, Y)
 

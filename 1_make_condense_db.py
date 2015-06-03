@@ -3,8 +3,8 @@ import numpy
 import os
 import pickle as serializer
 
-AUTHOR_FILE = '../name_normalize/NormalizeAuthor.csv'
-PAPER_AUTHOR_FILE = '../name_normalize/NormalizePaperAuthor.csv'
+AUTHOR_FILE = './NormalizeAuthor.csv'
+PAPER_AUTHOR_FILE = './NormalizePaperAuthor.csv'
 CONDENSE_DB_FILE = './condense_db.dump'
 
 
