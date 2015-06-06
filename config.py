@@ -1,5 +1,5 @@
 # Dataset
-TEST_FILE = '../data/Test.csv'
+TEST_FILE = '../data/Valid.csv'
 TRAIN_FILE = '../data/Train.csv'
 RESULT_FILE = './result.csv'
 
@@ -12,5 +12,7 @@ AUTHOR_FILE = './NormalizeAuthor.csv'
 PAPER_AUTHOR_FILE = './NormalizePaperAuthor.csv'
 
 # Cache
-FEATURE_DB_FILE = './feature_db.dump'
-SAMPLE_DB_FILE = './sample_db.dump'
+TRAIN_FEATURE_DB_FOLDER = './train_feature'
+TEST_FEATURE_DB_FOLDER = './test_feature/' + TEST_FILE.split('/')[-1]
+# FEATURE_DB_FILE = './feature_db.dump'
+# SAMPLE_DB_FILE = './sample_db.dump'

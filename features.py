@@ -7,6 +7,8 @@ from models import *
 
 
 def build_metadata_db():
+    print('Building metadata DB')
+
     authors = Authors()
 
     publications = Publications()
@@ -21,20 +23,6 @@ def build_metadata_db():
 
 if not os.path.isfile(META_DB_FILE):
     build_metadata_db()
-
-
-if (os.path.isfile(FEATURE_DB_FILE)
-        and os.path.isfile(SAMPLE_DB_FILE)):
-    print('No need to load metadata')
-else:
-    with open(META_DB_FILE, 'rb') as f:
-        authors_data, publications_data, papers_data, paper_authors_data = serializer.load(f)
-        authors = Authors(_data=authors_data)
-        publications = Publications(_data=publications_data)
-        papers = Papers(_data=papers_data)
-        paper_authors = PaperAuthors(_data=paper_authors_data)
-
-    print('Loading metadata is completed.')
 
 
 def BayesAuthorToPaper():
@@ -186,21 +174,23 @@ def AuthorCoauthorNameDiffer():
         if a_row is None or a_row[Authors.IDX_NAME] == '':
             return np.nan
 
-        coa_dists = []
+        coa_sims = []
         for ipid, iaid in paper_authors.get_by_pid(pid):
-            coa_row = authors.get(iaid)
-            if coa_row is None or coa_row[Authors.IDX_NAME] == '':
+            pa_row = paper_authors.get(pid, iaid)
+
+            if pa_row is None or pa_row[PaperAuthors.IDX_NAME] == '':
                 continue
+
             sim = jaro_winkler(
                 a_row[Authors.IDX_NAME],
-                coa_row[Authors.IDX_NAME]
+                pa_row[PaperAuthors.IDX_NAME]
             )
-            coa_dists.append(sim)
+            coa_sims.append(sim)
 
-        if not coa_dists:
+        if not coa_sims:
             return np.nan
 
-        return np.max(coa_dists)
+        return np.max(coa_sims)
 
     return calculator
 
@@ -258,7 +248,12 @@ def AffiliationNameDiffer():
 
 
 def AuthorYearMid():
+    cache_by_aid = [None, None]
+
     def calculator(aid, pid):
+        if cache_by_aid[0] == aid:
+            return cache_by_aid[1]
+
         years = []
         for ipid, iaid in paper_authors.get_by_aid(aid):
             p_row = papers.get(ipid)
@@ -271,15 +266,25 @@ def AuthorYearMid():
             years.append(p_row[Papers.IDX_YEAR])
 
         if years:
-            return np.median(years)
+            result = np.median(years)
+        else:
+            result = np.nan
 
-        return np.nan
+        cache_by_aid[0] = aid
+        cache_by_aid[1] = result
+
+        return result
 
     return calculator
 
 
 def AuthorYearMin():
+    cache_by_aid = [None, None]
+
     def calculator(aid, pid):
+        if cache_by_aid[0] == aid:
+            return cache_by_aid[1]
+
         years = []
         for ipid, iaid in paper_authors.get_by_aid(aid):
             p_row = papers.get(ipid)
@@ -292,15 +297,25 @@ def AuthorYearMin():
             years.append(p_row[Papers.IDX_YEAR])
 
         if years:
-            return np.min(years)
+            result = np.min(years)
+        else:
+            result = np.nan
 
-        return np.nan
+        cache_by_aid[0] = aid
+        cache_by_aid[1] = result
+
+        return result
 
     return calculator
 
 
 def AuthorYearMax():
+    cache_by_aid = [None, None]
+
     def calculator(aid, pid):
+        if cache_by_aid[0] == aid:
+            return cache_by_aid[1]
+
         years = []
         for ipid, iaid in paper_authors.get_by_aid(aid):
             p_row = papers.get(ipid)
@@ -313,9 +328,14 @@ def AuthorYearMax():
             years.append(p_row[Papers.IDX_YEAR])
 
         if years:
-            return np.max(years)
+            result = np.max(years)
+        else:
+            result = np.nan
 
-        return np.nan
+        cache_by_aid[0] = aid
+        cache_by_aid[1] = result
+
+        return result
 
     return calculator
 
@@ -352,15 +372,23 @@ def PaperNumAuthor():
 
 
 def AuthorNumCoauthor():
+    coauthor_cache_by_aid = [None, None]
+
     def calculator(aid, pid):
         target_paper_authors = set()
         for ipid, iaid in paper_authors.get_by_pid(pid):
             target_paper_authors.add(iaid)
 
-        author_coauthors = set()
-        for ipid, iaid in paper_authors.get_by_aid(aid):
-            for copid, coaid in paper_authors.get_by_pid(ipid):
-                author_coauthors.add(coaid)
+        if coauthor_cache_by_aid[0] == aid:
+            author_coauthors = coauthor_cache_by_aid[1]
+        else:
+            author_coauthors = set()
+            for ipid, iaid in paper_authors.get_by_aid(aid):
+                for copid, coaid in paper_authors.get_by_pid(ipid):
+                    author_coauthors.add(coaid)
+
+            coauthor_cache_by_aid[0] = aid
+            coauthor_cache_by_aid[1] = author_coauthors
 
         return len(target_paper_authors & author_coauthors)
 
@@ -368,7 +396,12 @@ def AuthorNumCoauthor():
 
 
 def AuthorNumPublication():
+    cache_by_aid = [None, None]
+
     def calculator(aid, pid):
+        if cache_by_aid[0] == aid:
+            return cache_by_aid[1]
+
         my_publications = set()
         for ipid, iaid in paper_authors.get_by_aid(aid):
             paper = papers.get(ipid)
@@ -378,7 +411,12 @@ def AuthorNumPublication():
                 continue
             my_publications.add(paper[Papers.IDX_PUB_ID])
 
-        return len(my_publications)
+        result = len(my_publications)
+
+        cache_by_aid[0] = aid
+        cache_by_aid[1] = result
+
+        return result
 
     return calculator
 
@@ -412,6 +450,8 @@ def AuthorPaperTopicSim():
         nn = np.nonzero(topic_array)[0]
         return list(zip((nn + 1), topic_array[nn]))
 
+    my_topic_cache_by_aid = [None, None]
+
     def calculator(aid, pid):
         paper = papers.get(pid)
         if paper is None or paper[Papers.IDX_PUB_ID] is None:
@@ -421,22 +461,28 @@ def AuthorPaperTopicSim():
 
         publication_topic = topic_result[publication[Publications.IDX_ORIGINAL_ID]]
 
-        my_keywords = []
+        if my_topic_cache_by_aid[0] == aid:
+            my_topic = my_topic_cache_by_aid[1]
+        else:
+            my_keywords = []
 
-        for ipid, iaid in paper_authors.get_by_aid(aid):
-            paper = papers.get(ipid)
-            if paper is None:
-                continue
-            keywords = tokenizer.tokenize(unidecode(paper[Papers.IDX_TITLE]).lower())
-            if not keywords:
-                continue
-            my_keywords.extend(keywords)
+            for ipid, iaid in paper_authors.get_by_aid(aid):
+                paper = papers.get(ipid)
+                if paper is None:
+                    continue
+                keywords = tokenizer.tokenize(unidecode(paper[Papers.IDX_TITLE]).lower())
+                if not keywords:
+                    continue
+                my_keywords.extend(keywords)
 
-        my_keywords = list(filter(lambda s: s not in stopwords_set, my_keywords))
-        if not my_keywords:
-            return np.nan
+            my_keywords = list(filter(lambda s: s not in stopwords_set, my_keywords))
+            if not my_keywords:
+                return np.nan
 
-        my_topic = lda[dictionary.doc2bow(my_keywords)]
+            my_topic = lda[dictionary.doc2bow(my_keywords)]
+
+            my_topic_cache_by_aid[0] = aid
+            my_topic_cache_by_aid[1] = my_topic
 
         '''
         # Use cosine distance
@@ -462,7 +508,12 @@ def AuthorNumTitleWords():
     tokenizer = nltk.tokenize.RegexpTokenizer(r'[\w]{2,}')
     stopwords_set = set(stopwords.words())
 
+    cache_by_aid = [None, None]
+
     def calculator(aid, pid):
+        if cache_by_aid[0] == aid:
+            return cache_by_aid[1]
+
         my_keywords = []
 
         for ipid, iaid in paper_authors.get_by_aid(aid):
@@ -474,7 +525,12 @@ def AuthorNumTitleWords():
                 continue
             my_keywords.extend(keywords)
 
-        return len(my_keywords)
+        result = len(my_keywords)
+
+        cache_by_aid[0] = aid
+        cache_by_aid[1] = result
+
+        return result
 
     return calculator
 
@@ -505,7 +561,12 @@ def AuthorNumKeywords():
     tokenizer = nltk.tokenize.RegexpTokenizer(r'[\w]{2,}')
     stopwords_set = set(stopwords.words())
 
+    cache_by_aid = [None, None]
+
     def calculator(aid, pid):
+        if cache_by_aid[0] == aid:
+            return cache_by_aid[1]
+
         my_keywords = []
 
         for ipid, iaid in paper_authors.get_by_aid(aid):
@@ -517,7 +578,12 @@ def AuthorNumKeywords():
                 continue
             my_keywords.extend(keywords)
 
-        return len(my_keywords)
+        result = len(my_keywords)
+
+        cache_by_aid[0] = aid
+        cache_by_aid[1] = result
+
+        return result
 
     return calculator
 
@@ -538,37 +604,67 @@ def PaperNumKeywords():
 
     return calculator
 
-extractor_names = []
-extractors = []
+feature_names = []
 
-extractor_names.append('BayesAuthorToPaper')
-extractor_names.append('AuthorNameDiffer')
-extractor_names.append('AuthorLastnameDiffer')
-extractor_names.append('AuthorCoauthorNameDiffer')
-extractor_names.append('AffiliationNameDiffer')
-extractor_names.append('AuthorYearMid')
-extractor_names.append('AuthorYearMin')
-extractor_names.append('AuthorYearMax')
-extractor_names.append('PaperYear')
-extractor_names.append('AuthorNumPaper')
-extractor_names.append('PaperNumAuthor')
-extractor_names.append('AuthorNumCoauthor')
-extractor_names.append('AuthorNumPublication')
-# extractor_names.append('AuthorPaperTopicSim')
-extractor_names.append('AuthorNumTitleWords')
-extractor_names.append('PaperNumTitleWords')
-extractor_names.append('AuthorNumKeywords')
-extractor_names.append('PaperNumKeywords')
+# feature_names.append('BayesAuthorToPaper')
+# feature_names.append('AuthorNameDiffer')
+# feature_names.append('AuthorLastnameDiffer')
+# feature_names.append('AuthorCoauthorNameDiffer')
+# feature_names.append('AffiliationNameDiffer')
+feature_names.append('AuthorYearMid')
+feature_names.append('AuthorYearMin')
+feature_names.append('AuthorYearMax')
+feature_names.append('PaperYear')
+feature_names.append('AuthorNumPaper')
+feature_names.append('PaperNumAuthor')
+feature_names.append('AuthorNumCoauthor')
+feature_names.append('AuthorNumPublication')
+# feature_names.append('AuthorPaperTopicSim')
+# feature_names.append('AuthorNumTitleWords')
+# feature_names.append('PaperNumTitleWords')
+# feature_names.append('AuthorNumKeywords')
+# feature_names.append('PaperNumKeywords')
 
-if (os.path.isfile(FEATURE_DB_FILE)
-        and os.path.isfile(SAMPLE_DB_FILE)):
-    print('No need to load feature extractor')
+is_all_cached = True
+
+# check train features
+for feature_name in feature_names:
+    feature_dump_location = TRAIN_FEATURE_DB_FOLDER + '/{}.dump'.format(feature_name)
+    if not os.path.isfile(feature_dump_location):
+        is_all_cached = False
+        break
+
+# check test features
+for feature_name in feature_names:
+    feature_dump_location = TEST_FEATURE_DB_FOLDER + '/{}.dump'.format(feature_name)
+    if not os.path.isfile(feature_dump_location):
+        is_all_cached = False
+        break
+
+if is_all_cached:
+    print('No need to load metadata')
 else:
-    # init feature extractor
-    for extractor_name in extractor_names:
-        extractor_maker = locals()[extractor_name]
-        print('init {}...'.format(extractor_name))
-        extractors.append(extractor_maker())
+    with open(META_DB_FILE, 'rb') as f:
+        authors_data, publications_data, papers_data, paper_authors_data = serializer.load(f)
+        authors = Authors(_data=authors_data)
+        publications = Publications(_data=publications_data)
+        papers = Papers(_data=papers_data)
+        paper_authors = PaperAuthors(_data=paper_authors_data)
+
+    print('Loading metadata is completed.')
+
+
+def get_feature_extractor(feature_name, feature_mean=None):
+    extractor_maker = globals()[feature_name]
+    extractor = extractor_maker()
+
+    def extractor_wrapper(aid, pid):
+        feature_value = extractor(aid, pid)
+        if np.isnan(feature_value) and feature_mean is not None:
+            return feature_mean
+        return feature_value
+
+    return extractor_wrapper
 
 
 def make_feature_vector(aid, pid, missing_value_info=None):
