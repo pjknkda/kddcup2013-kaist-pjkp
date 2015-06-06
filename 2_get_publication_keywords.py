@@ -1,8 +1,9 @@
 import csv
+import collections
 import nltk
 import pickle as serializer
 import re
-import collections
+from unidecode import unidecode
 
 from nltk.corpus import stopwords
 
@@ -62,7 +63,7 @@ paper_conference_id_idx = paper_fields.index('ConferenceId')
 paper_journal_id_idx = paper_fields.index('JournalId')
 
 for paper_id, paper in papers:
-    keywords = tokenizer.tokenize(paper[paper_keyword_idx].lower())
+    keywords = tokenizer.tokenize(unidecode(paper[paper_keyword_idx]).lower())
 
     if not keywords:
         continue

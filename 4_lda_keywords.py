@@ -14,7 +14,7 @@ CORPUS_FILE = './corpus.mm'
 LDA_FILE = './result.lda'
 TOPIC_FILE = './lda_topic.dump'
 
-NUM_TOPICS = 100
+NUM_TOPICS = 500
 
 
 logging.basicConfig(level=logging.INFO,
@@ -28,7 +28,7 @@ corpus = corpora.MmCorpus(CORPUS_FILE)
 # Make / Load LDA result
 
 def make_lda_result():
-    lda = LdaModel(corpus, num_topics=NUM_TOPICS, id2word=dictionary, passes=2, iterations=200)
+    lda = LdaModel(corpus, num_topics=NUM_TOPICS, id2word=dictionary, passes=2, iterations=1000)
 
     # save LDA result
     lda.save(LDA_FILE)
