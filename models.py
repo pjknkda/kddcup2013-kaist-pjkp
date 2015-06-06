@@ -150,34 +150,3 @@ class PaperAuthors(object):
 
     def get_by_aid(self, aid):
         return self.aids.get(aid, [])
-
-
-def build_metadata_db():
-    authors = Authors()
-
-    publications = Publications()
-
-    papers = Papers(publications=publications)
-
-    paper_authors = PaperAuthors()
-
-    with open(META_DB_FILE, 'wb') as f:
-        serializer.dump((authors.data, publications.data, papers.data, paper_authors.data), f, protocol=-1)
-
-
-if not os.path.isfile(META_DB_FILE):
-    build_metadata_db()
-
-
-if (os.path.isfile(FEATURE_DB_FILE)
-        and os.path.isfile(SAMPLE_DB_FILE)):
-    print('No need to load metadata')
-else:
-    with open(META_DB_FILE, 'rb') as f:
-        authors_data, publications_data, papers_data, paper_authors_data = serializer.load(f)
-        authors = Authors(_data=authors_data)
-        publications = Publications(_data=publications_data)
-        papers = Papers(_data=papers_data)
-        paper_authors = PaperAuthors(_data=paper_authors_data)
-
-    print('Loading metadata is completed.')

@@ -87,14 +87,19 @@ print('feature std: ', np.std(X, axis=0))
 #                                     verbose=1)
 
 from sklearn.ensemble import GradientBoostingClassifier
-classifier = GradientBoostingClassifier(n_estimators=300,
+classifier = GradientBoostingClassifier(n_estimators=1000,
                                         verbose=1)
 
 
 classifier.fit(X, Y)
 
 print(classifier.score(X, Y))
-print(classifier.feature_importances_)
+
+try:
+    for i, extractor_name in enumerate(extractor_names):
+        print('{:25s}: {}'.format(extractor_name, classifier.feature_importances_[i]))
+except:
+    pass
 
 
 def draw_decision_graph():

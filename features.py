@@ -3,6 +3,38 @@ import os
 import pickle as serializer
 
 from config import *
+from models import *
+
+
+def build_metadata_db():
+    authors = Authors()
+
+    publications = Publications()
+
+    papers = Papers(publications=publications)
+
+    paper_authors = PaperAuthors()
+
+    with open(META_DB_FILE, 'wb') as f:
+        serializer.dump((authors.data, publications.data, papers.data, paper_authors.data), f, protocol=-1)
+
+
+if not os.path.isfile(META_DB_FILE):
+    build_metadata_db()
+
+
+if (os.path.isfile(FEATURE_DB_FILE)
+        and os.path.isfile(SAMPLE_DB_FILE)):
+    print('No need to load metadata')
+else:
+    with open(META_DB_FILE, 'rb') as f:
+        authors_data, publications_data, papers_data, paper_authors_data = serializer.load(f)
+        authors = Authors(_data=authors_data)
+        publications = Publications(_data=publications_data)
+        papers = Papers(_data=papers_data)
+        paper_authors = PaperAuthors(_data=paper_authors_data)
+
+    print('Loading metadata is completed.')
 
 
 def BayesAuthorToPaper():
@@ -121,6 +153,58 @@ def AuthorNameDiffer():
     return calculator
 
 
+def AuthorLastnameDiffer():
+    from jellyfish import jaro_winkler
+
+    def calculator(aid, pid):
+        a_row = authors.get(aid)
+        pa_row = paper_authors.get(pid, aid)
+
+        if a_row is None or pa_row is None:
+            return np.nan
+
+        if (a_row[Authors.IDX_NAME] == '' or
+                pa_row[PaperAuthors.IDX_NAME]) == '':
+            return np.nan
+
+        # aloready normalized name
+        sim = jaro_winkler(
+            a_row[Authors.IDX_NAME].split()[-1],
+            pa_row[PaperAuthors.IDX_NAME].split()[-1]
+        )
+        return sim
+
+    return calculator
+
+
+def AuthorCoauthorNameDiffer():
+    from jellyfish import jaro_winkler
+
+    def calculator(aid, pid):
+        a_row = authors.get(aid)
+
+        if a_row is None or a_row[Authors.IDX_NAME] == '':
+            return np.nan
+
+        coa_dists = []
+        for ipid, iaid in paper_authors.get_by_pid(pid):
+            coa_row = authors.get(iaid)
+            if coa_row is None or coa_row[Authors.IDX_NAME] == '':
+                continue
+            sim = jaro_winkler(
+                a_row[Authors.IDX_NAME],
+                coa_row[Authors.IDX_NAME]
+            )
+            coa_dists.append(sim)
+
+        if not coa_dists:
+            return np.nan
+
+        return np.max(coa_dists)
+
+    return calculator
+
+
 def AuthorNameAbbChecker():
     import re
 
@@ -174,15 +258,14 @@ def AffiliationNameDiffer():
 
 
 def AuthorYearMid():
-    def calculator(aid):
+    def calculator(aid, pid):
         years = []
         for ipid, iaid in paper_authors.get_by_aid(aid):
             p_row = papers.get(ipid)
 
             if p_row is None:
                 continue
-
-            if not (1500 <= p_row[Papers.IDX_YEAR] <= 2013):
+            if not (1800 <= p_row[Papers.IDX_YEAR] <= 2013):
                 continue
 
             years.append(p_row[Papers.IDX_YEAR])
@@ -195,14 +278,56 @@ def AuthorYearMid():
     return calculator
 
 
+def AuthorYearMin():
+    def calculator(aid, pid):
+        years = []
+        for ipid, iaid in paper_authors.get_by_aid(aid):
+            p_row = papers.get(ipid)
+
+            if p_row is None:
+                continue
+            if not (1800 <= p_row[Papers.IDX_YEAR] <= 2013):
+                continue
+
+            years.append(p_row[Papers.IDX_YEAR])
+
+        if years:
+            return np.min(years)
+
+        return np.nan
+
+    return calculator
+
+
+def AuthorYearMax():
+    def calculator(aid, pid):
+        years = []
+        for ipid, iaid in paper_authors.get_by_aid(aid):
+            p_row = papers.get(ipid)
+
+            if p_row is None:
+                continue
+            if not (1800 <= p_row[Papers.IDX_YEAR] <= 2013):
+                continue
+
+            years.append(p_row[Papers.IDX_YEAR])
+
+        if years:
+            return np.max(years)
+
+        return np.nan
+
+    return calculator
+
+
 def PaperYear():
-    def calculator(pid):
+    def calculator(aid, pid):
         p_row = papers.get(pid)
 
         if p_row is None:
             return np.nan
 
-        if not (1500 <= p_row[Papers.IDX_YEAR] <= 2013):  # filter invalid info
+        if not (1800 <= p_row[Papers.IDX_YEAR] <= 2013):  # filter invalid info
             return np.nan
 
         return p_row[Papers.IDX_YEAR]
@@ -211,7 +336,7 @@ def PaperYear():
 
 
 def AuthorNumPaper():
-    def calculator(aid):
+    def calculator(aid, pid):
         pid_aid_list = paper_authors.get_by_aid(aid)
         return len(pid_aid_list)
 
@@ -219,7 +344,7 @@ def AuthorNumPaper():
 
 
 def PaperNumAuthor():
-    def calculator(pid):
+    def calculator(aid, pid):
         pid_aid_list = paper_authors.get_by_pid(pid)
         return len(pid_aid_list)
 
@@ -243,7 +368,7 @@ def AuthorNumCoauthor():
 
 
 def AuthorNumPublication():
-    def calculator(aid):
+    def calculator(aid, pid):
         my_publications = set()
         for ipid, iaid in paper_authors.get_by_aid(aid):
             paper = papers.get(ipid)
@@ -337,7 +462,7 @@ def AuthorNumTitleWords():
     tokenizer = nltk.tokenize.RegexpTokenizer(r'[\w]{2,}')
     stopwords_set = set(stopwords.words())
 
-    def calculator(aid):
+    def calculator(aid, pid):
         my_keywords = []
 
         for ipid, iaid in paper_authors.get_by_aid(aid):
@@ -363,7 +488,7 @@ def PaperNumTitleWords():
     tokenizer = nltk.tokenize.RegexpTokenizer(r'[\w]{2,}')
     stopwords_set = set(stopwords.words())
 
-    def calculator(pid):
+    def calculator(aid, pid):
         paper = papers.get(pid)
         keywords = set(tokenizer.tokenize(unidecode(paper[Papers.IDX_TITLE]).lower()))
         return len(keywords)
@@ -380,7 +505,7 @@ def AuthorNumKeywords():
     tokenizer = nltk.tokenize.RegexpTokenizer(r'[\w]{2,}')
     stopwords_set = set(stopwords.words())
 
-    def calculator(aid):
+    def calculator(aid, pid):
         my_keywords = []
 
         for ipid, iaid in paper_authors.get_by_aid(aid):
@@ -406,53 +531,52 @@ def PaperNumKeywords():
     tokenizer = nltk.tokenize.RegexpTokenizer(r'[\w]{2,}')
     stopwords_set = set(stopwords.words())
 
-    def calculator(pid):
+    def calculator(aid, pid):
         paper = papers.get(pid)
         keywords = set(tokenizer.tokenize(unidecode(paper[Papers.IDX_KEYWORDS]).lower()))
         return len(keywords)
 
     return calculator
 
+extractor_names = []
+extractors = []
+
+extractor_names.append('BayesAuthorToPaper')
+extractor_names.append('AuthorNameDiffer')
+extractor_names.append('AuthorLastnameDiffer')
+extractor_names.append('AuthorCoauthorNameDiffer')
+extractor_names.append('AffiliationNameDiffer')
+extractor_names.append('AuthorYearMid')
+extractor_names.append('AuthorYearMin')
+extractor_names.append('AuthorYearMax')
+extractor_names.append('PaperYear')
+extractor_names.append('AuthorNumPaper')
+extractor_names.append('PaperNumAuthor')
+extractor_names.append('AuthorNumCoauthor')
+extractor_names.append('AuthorNumPublication')
+# extractor_names.append('AuthorPaperTopicSim')
+extractor_names.append('AuthorNumTitleWords')
+extractor_names.append('PaperNumTitleWords')
+extractor_names.append('AuthorNumKeywords')
+extractor_names.append('PaperNumKeywords')
 
 if (os.path.isfile(FEATURE_DB_FILE)
         and os.path.isfile(SAMPLE_DB_FILE)):
     print('No need to load feature extractor')
 else:
-    bayes_aid_to_pid = BayesAuthorToPaper()
-    author_name_differ = AuthorNameDiffer()
-    author_name_abb_checker = AuthorNameAbbChecker()
-    affiliation_name_differ = AffiliationNameDiffer()
-    author_year_mid = AuthorYearMid()
-    paper_year = PaperYear()
-    author_num_paper = AuthorNumPaper()
-    paper_num_author = PaperNumAuthor()
-    author_num_coauthor = AuthorNumCoauthor()
-    author_num_publication = AuthorNumPublication()
-    #author_paper_topic_sim = AuthorPaperTopicSim()
-    author_num_title_words = AuthorNumTitleWords()
-    paper_num_title_words = PaperNumTitleWords()
-    author_num_keywords = AuthorNumKeywords()
-    paper_num_keywords = PaperNumKeywords()
+    # init feature extractor
+    for extractor_name in extractor_names:
+        extractor_maker = locals()[extractor_name]
+        print('init {}...'.format(extractor_name))
+        extractors.append(extractor_maker())
 
 
 def make_feature_vector(aid, pid, missing_value_info=None):
-    feature_vec = np.array([
-        bayes_aid_to_pid(aid, pid),
-        author_name_differ(aid, pid),
-        author_name_abb_checker(aid, pid),
-        affiliation_name_differ(aid, pid),
-        author_year_mid(aid),
-        paper_year(pid),
-        author_num_paper(aid),          # -------|
-        paper_num_author(pid),          # -- key feature
-        author_num_coauthor(aid, pid),  # -------|
-        author_num_publication(aid),
-        # author_paper_topic_sim(aid, pid), # very slow
-        author_num_title_words(aid),
-        paper_num_title_words(pid),
-        author_num_keywords(aid),
-        paper_num_keywords(pid),
-    ])
+    feature_vec = np.array(
+        [extractor(aid, pid) for extractor in extractors]
+    )
+
+    feature_vec = feature_vec.flatten()
 
     if missing_value_info is not None:
         for feature_idx, feature_mean in missing_value_info:
