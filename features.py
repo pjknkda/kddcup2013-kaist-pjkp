@@ -92,6 +92,8 @@ def BayesAuthorToPaper():
     with open(INDEX_FILE, 'rb') as f:
         aid_to_nids, nid_to_pids, aid_to_pids = serializer.load(f)
 
+    prob_cache_by_aid = [None, None]
+
     def calculator(aid, pid):
         nids_arr = aid_to_nids[aid]
         unique_nids = np.unique(nids_arr)
@@ -99,18 +101,24 @@ def BayesAuthorToPaper():
         pids = aid_to_pids[aid]
         target_pid_idx = list(pids).index(pid)
 
-        pids_traspose = pids.reshape(len(pids), 1)
-        prob = np.zeros(len(pids))
+        if prob_cache_by_aid[0] == aid:
+            prob = prob_cache_by_aid[1]
+        else:
+            pids_traspose = pids.reshape(len(pids), 1)
+            prob = np.zeros(len(pids))
 
-        for nid in unique_nids:
-            pids_given_nid_arr = nid_to_pids[nid]
-            pids_given_nid_tile = np.tile(pids_given_nid_arr, (len(pids), 1))
-            pid_nid_cnt = np.sum(pids_given_nid_tile == pids_traspose, axis=1)
-            p1 = pid_nid_cnt / len(pids_given_nid_arr)
+            for nid in unique_nids:
+                pids_given_nid_arr = nid_to_pids[nid]
+                pids_given_nid_tile = np.tile(pids_given_nid_arr, (len(pids), 1))
+                pid_nid_cnt = np.sum(pids_given_nid_tile == pids_traspose, axis=1)
+                p1 = pid_nid_cnt / len(pids_given_nid_arr)
 
-            p2 = 1.0 * np.sum(nids_arr == nid) / len(nids_arr)
+                p2 = 1.0 * np.sum(nids_arr == nid) / len(nids_arr)
 
-            prob += p1 * p2
+                prob += p1 * p2
+
+            prob_cache_by_aid[0] = aid
+            prob_cache_by_aid[1] = prob
 
         return prob[target_pid_idx] / prob.sum()
 
@@ -606,11 +614,11 @@ def PaperNumKeywords():
 
 feature_names = []
 
-# feature_names.append('BayesAuthorToPaper')
-# feature_names.append('AuthorNameDiffer')
-# feature_names.append('AuthorLastnameDiffer')
-# feature_names.append('AuthorCoauthorNameDiffer')
-# feature_names.append('AffiliationNameDiffer')
+feature_names.append('BayesAuthorToPaper')
+feature_names.append('AuthorNameDiffer')
+feature_names.append('AuthorLastnameDiffer')
+feature_names.append('AuthorCoauthorNameDiffer')
+feature_names.append('AffiliationNameDiffer')
 feature_names.append('AuthorYearMid')
 feature_names.append('AuthorYearMin')
 feature_names.append('AuthorYearMax')

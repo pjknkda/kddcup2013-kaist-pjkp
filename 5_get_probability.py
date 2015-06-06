@@ -157,7 +157,7 @@ for aid, pids in queries:
         x = []
 
         for feature_name in feature_names:
-            x.append(train_features[feature_name][test_x_idx])
+            x.append(test_features[feature_name][test_x_idx])
 
         test_X.append(x)
         test_x_idx += 1
@@ -176,7 +176,7 @@ print('Training classifier')
 #                                     verbose=1)
 
 from sklearn.ensemble import GradientBoostingClassifier
-classifier = GradientBoostingClassifier(n_estimators=1000,
+classifier = GradientBoostingClassifier(n_estimators=10,
                                         verbose=1)
 
 
