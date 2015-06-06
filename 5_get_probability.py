@@ -176,7 +176,7 @@ print('Training classifier')
 #                                     verbose=1)
 
 from sklearn.ensemble import GradientBoostingClassifier
-classifier = GradientBoostingClassifier(n_estimators=10,
+classifier = GradientBoostingClassifier(n_estimators=1000,
                                         verbose=1)
 
 

@@ -467,7 +467,11 @@ def AuthorPaperTopicSim():
 
         publication = publications.get(paper[Papers.IDX_PUB_ID])
 
-        publication_topic = topic_result[publication[Publications.IDX_ORIGINAL_ID]]
+        pub_ori_id = publication[Publications.IDX_ORIGINAL_ID]
+        if pub_ori_id not in topic_result:
+            return np.nan
+
+        publication_topic = topic_result[pub_ori_id]
 
         if my_topic_cache_by_aid[0] == aid:
             my_topic = my_topic_cache_by_aid[1]
@@ -627,11 +631,11 @@ feature_names.append('AuthorNumPaper')
 feature_names.append('PaperNumAuthor')
 feature_names.append('AuthorNumCoauthor')
 feature_names.append('AuthorNumPublication')
-# feature_names.append('AuthorPaperTopicSim')
-# feature_names.append('AuthorNumTitleWords')
-# feature_names.append('PaperNumTitleWords')
-# feature_names.append('AuthorNumKeywords')
-# feature_names.append('PaperNumKeywords')
+feature_names.append('AuthorPaperTopicSim')
+feature_names.append('AuthorNumTitleWords')
+feature_names.append('PaperNumTitleWords')
+feature_names.append('AuthorNumKeywords')
+feature_names.append('PaperNumKeywords')
 
 is_all_cached = True
 
