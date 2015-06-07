@@ -1,7 +1,11 @@
+# Judge set
+VALID_FILE = '../data/Valid.csv'
+VALID_SOLUTION_FILE = '../data/ValidSolution.csv'
+
 # Dataset
-TEST_FILE = '../data/Valid.csv'
+TEST_FILE = '../data/Test.csv'
 TRAIN_FILE = '../data/Train.csv'
-RESULT_FILE = './result.csv'
+RESULT_FILE = './result2.csv'
 
 # Meta data
 META_DB_FILE = './meta_db.dump'
