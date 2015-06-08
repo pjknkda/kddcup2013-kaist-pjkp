@@ -73,12 +73,6 @@ for feature_name in feature_names:
 
         feature_X = np.array(feature_X)
 
-        # replace nan value to mean value
-        nan_indexes = np.isnan(feature_X)
-        if np.any(nan_indexes):
-            feature_mean = np.mean(feature_X[np.nonzero(~nan_indexes)])
-            feature_X[np.nonzero(nan_indexes)] = feature_mean
-
         with open(feature_dump_location, 'wb') as f:
             serializer.dump(feature_X, f, protocol=-1)
 
@@ -99,89 +93,98 @@ for i in range(len(Y)):
 
 X = np.array(X)
 
-print('feature mean: ', np.mean(X, axis=0))
-print('feature std: ', np.std(X, axis=0))
+from sklearn.preprocessing import Imputer
+missing_value_imputer = Imputer(missing_values=np.nan,
+                                strategy='mean',
+                                axis=0)
+X = missing_value_imputer.fit_transform(X)
+
+print('Feature statistics [Train]')
+
+feature_mean = np.mean(X, axis=0)
+feature_std = np.std(X, axis=0)
+
+for i, feature_name in enumerate(feature_names):
+    print('- {:25s}: mean {}, std {}'.format(feature_name, feature_mean[i], feature_std[i]))
 
 
-# Read test file
-queries = []
+def make_prediction_target(filepath):
+    # Read test file
+    queries = []
 
-with open(TEST_FILE, 'r', encoding='utf-8') as csvfile:
-    reader = csv.reader(csvfile)
-    next(reader)
+    with open(filepath, 'r', encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+        next(reader)
 
-    for row in reader:
-        aid = int(row[0])
-        pids = np.array(list(map(int, row[1].split())))
-        unique_pids = np.unique(pids)
-        pids_queue = set(unique_pids)
-        remain_pids = []
-        for pid in pids:
-            if pid in pids_queue:
-                pids_queue.remove(pid)
-            else:
-                remain_pids.append(pid)
-        queries.append((aid, unique_pids, remain_pids))
-
-
-print('Feature extration [Test]')
-os.makedirs(TEST_FEATURE_DB_FOLDER, mode=0o644, exist_ok=True)
-
-test_features = dict()
-
-for feature_name in feature_names:
-    print('- {:25s}: '.format(feature_name), end=" ")
-
-    feature_dump_location = TEST_FEATURE_DB_FOLDER + '/{}.dump'.format(feature_name)
-
-    feature_X = []
-
-    if os.path.isfile(feature_dump_location):
-        with open(feature_dump_location, 'rb') as f:
-            feature_X = serializer.load(f)
-        print('cached')
-    else:
-        starting_time = time.time()
-
-        feature_mean = np.mean(train_features[feature_name])
-        extractor = get_feature_extractor(feature_name, feature_mean)
-
-        for aid, pids, remain_pids in queries:
+        for row in reader:
+            aid = int(row[0])
+            pids = np.array(list(map(int, row[1].split())))
+            unique_pids = np.unique(pids)
+            pids_queue = set(unique_pids)
+            remain_pids = []
             for pid in pids:
-                feature_X.append(extractor(aid, pid))
+                if pid in pids_queue:
+                    pids_queue.remove(pid)
+                else:
+                    remain_pids.append(pid)
+            queries.append((aid, unique_pids, remain_pids))
 
-        feature_X = np.array(feature_X)
+    print('Feature extration [{}]'.format(filepath))
 
-        with open(feature_dump_location, 'wb') as f:
-            serializer.dump(feature_X, f, protocol=-1)
+    target_feature_db_folder = TARGET_FEATURE_DB_FOLDER + filepath.split('/')[-1]
+    os.makedirs(target_feature_db_folder, mode=0o644, exist_ok=True)
 
-        print('takes {:.4f}s'.format(time.time() - starting_time))
+    test_features = dict()
 
-    test_features[feature_name] = feature_X
+    for feature_name in feature_names:
+        print('- {:25s}: '.format(feature_name), end=" ")
 
-test_X = []
-test_x_idx = 0
-for aid, pids, remain_pids in queries:
-    for pid in pids:
-        x = []
+        feature_dump_location = target_feature_db_folder + '/{}.dump'.format(feature_name)
 
-        for feature_name in feature_names:
-            x.append(test_features[feature_name][test_x_idx])
+        feature_X = []
 
-        test_X.append(x)
-        test_x_idx += 1
+        if os.path.isfile(feature_dump_location):
+            with open(feature_dump_location, 'rb') as f:
+                feature_X = serializer.load(f)
+            print('cached')
+        else:
+            starting_time = time.time()
 
-test_X = np.array(test_X)
+            feature_mean = np.mean(train_features[feature_name])
+            extractor = get_feature_extractor(feature_name)
 
-# from sklearn.feature_selection import SelectKBest
-# from sklearn.feature_selection import chi2
+            for aid, pids, remain_pids in queries:
+                for pid in pids:
+                    feature_X.append(extractor(aid, pid))
 
-# selector = SelectKBest(chi2, k=4)
-# selector.fit(X, Y)
-# print(selector.scores_)
+            feature_X = np.array(feature_X)
 
-# X = selector.transform(X)
-# test_X = selector.transform(test_X)
+            with open(feature_dump_location, 'wb') as f:
+                serializer.dump(feature_X, f, protocol=-1)
+
+            print('takes {:.4f}s'.format(time.time() - starting_time))
+
+        test_features[feature_name] = feature_X
+
+    test_X = []
+    test_x_idx = 0
+    for aid, pids, remain_pids in queries:
+        for pid in pids:
+            x = []
+
+            for feature_name in feature_names:
+                x.append(test_features[feature_name][test_x_idx])
+
+            test_X.append(x)
+            test_x_idx += 1
+
+    test_X = np.array(test_X)
+
+    test_X = missing_value_imputer.transform(test_X)
+
+    return queries, test_X
+
+test_queries, test_X = make_prediction_target(TEST_FILE)
 
 # Classifier
 
@@ -189,34 +192,6 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.ensemble import RandomForestClassifier
-
-
-def PlotDeviance(clf):
-    import matplotlib.pyplot as plt
-
-    plt.figure()
-
-    # compute test set deviance
-    test_deviance = np.zeros((clf.get_params()['n_estimators'],), dtype=np.float64)
-
-    for i, y_pred in enumerate(clf.staged_decision_function(X)):
-        # clf.loss_ assumes that y_test[i] in {0, 1}
-        test_deviance[i] = clf.loss_(Y, y_pred)
-        if 2 < test_deviance[i]:
-            test_deviance[i] = 2.0
-
-    plt.plot((np.arange(test_deviance.shape[0]) + 1)[::5], test_deviance[::5],
-             '-', color='red', label='n={}, rate={}, sub={}'.format(
-        clf.get_params()['n_estimators'],
-        clf.get_params()['learning_rate'],
-        clf.get_params()['subsample']
-    ))
-
-    plt.legend(loc='upper left')
-    plt.xlabel('Boosting Iterations')
-    plt.ylabel('Test Set Deviance')
-
-    plt.show()
 
 
 def PlotDecisionArea():
@@ -229,9 +204,6 @@ def PlotDecisionArea():
     n_classes = 2
 
     nX = np.array(X)
-    # mean = nX.mean(axis=0)
-    # std = nX.std(axis=0)
-    # nX = (nX - mean) / std
 
     # We only take the two corresponding features
     from sklearn.decomposition import PCA
@@ -259,7 +231,7 @@ def PlotDecisionArea():
     nqX = (nqX - mean) / std
 
     # Train
-    model = ExtraTreesClassifier(n_estimators=300)
+    model = ExtraTreesClassifier(n_estimators=500)
     clf = model.fit(nX, y)
 
     # Now plot the decision boundary using a fine mesh as input to a
@@ -294,13 +266,8 @@ def PlotDecisionArea():
 
     plt.show()
 
-
-classifier = GradientBoostingClassifier(n_estimators=2000,
-                                        # max_depth=10,
-                                        max_leaf_nodes=2,
+classifier = GradientBoostingClassifier(n_estimators=1000,
                                         verbose=1)
-# classifier = GradientBoostingClassifier(n_estimators=1000,
-#                                   verbose=1)
 
 # Training classifier
 
@@ -308,7 +275,6 @@ classifier = GradientBoostingClassifier(n_estimators=2000,
 
 print('Training classifier')
 classifier.fit(X, Y)
-predictor = classifier.predict_proba
 
 
 print('Mean accuracy: {}'.format(classifier.score(X, Y)))
@@ -323,7 +289,7 @@ except:
 
 # Prediction
 print('Prediction on test data')
-predict_Y = predictor(test_X)
+predict_Y = classifier.predict_proba(test_X)
 
 
 # make output file
@@ -335,7 +301,7 @@ with open(RESULT_FILE, 'w', encoding='utf-8') as f:
     f.write('AuthorId,PaperIds\n')
 
     predict_y_idx = 0
-    for aid, pids, remain_pids in queries:
+    for aid, pids, remain_pids in test_queries:
         probabilites = []
         for pid in pids:
             probabilites.append(predict_Y[predict_y_idx][ok_idx])
@@ -348,3 +314,50 @@ with open(RESULT_FILE, 'w', encoding='utf-8') as f:
                 map(str, list(sorted_pids))
             )
         ))
+
+
+from score import *
+
+
+def valid_score_along_iteration():
+    import matplotlib.pyplot as plt
+
+    valid_solution = readCSV(VALID_SOLUTION_FILE)
+    valid_pids = []
+    for aid, pids_str, _ in valid_solution:
+        valid_pids.append(list(map(int, pids_str.split())))
+
+    valid_quries, valid_X = make_prediction_target(VALID_FILE)
+
+    test_score = np.zeros(int(classifier.get_params()['n_estimators'] / 10), dtype=np.float64)
+    for i, pred_y in enumerate(classifier.staged_predict_proba(valid_X)):
+        if i % 10 != 0:
+            continue
+
+        staged_solution = []
+        predict_y_idx = 0
+        for aid, pids, remain_pids in valid_quries:
+            probabilites = []
+            for pid in pids:
+                probabilites.append(pred_y[predict_y_idx][ok_idx])
+                predict_y_idx += 1
+
+            sorted_pids = pids[np.argsort(probabilites)[::-1]]
+            staged_solution.append(sorted_pids)
+
+        test_score[int(i / 10)] = mapk(valid_pids, staged_solution)
+
+    top_10_score_indexes = np.argsort(test_score)[::-1][:10]
+    print('Top 10 score indexes: ', top_10_score_indexes)
+    print('Top 10 scores', test_score[top_10_score_indexes])
+
+    plt.plot((np.arange(test_score.shape[0]) + 1), test_score,
+             label='score')
+
+    plt.legend(loc='lower right')
+    plt.xlabel('Boosting Iterations (10x)')
+    plt.ylabel('Valid Set Score')
+
+    plt.show()
+
+valid_score_along_iteration()

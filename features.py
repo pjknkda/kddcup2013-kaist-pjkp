@@ -207,6 +207,40 @@ def AuthorNameAbbChecker():
     return calculator
 
 
+def AuthorNameFormat():
+    def calculator(aid, pid):
+        a_row = authors.get(aid)
+
+        if a_row is None:
+            return np.nan
+
+        a_name = a_row[Authors.IDX_NAME]
+
+        if a_name == '':
+            return np.nan
+
+        return len(a_name.split())
+
+    return calculator
+
+
+def PaperNameFormat():
+    def calculator(aid, pid):
+        pa_row = paper_authors.get(pid, aid)
+
+        if pa_row is None:
+            return np.nan
+
+        pa_name = pa_row[PaperAuthors.IDX_NAME]
+
+        if pa_name == '':
+            return np.nan
+
+        return len(pa_name.split())
+
+    return calculator
+
+
 def AffiliationNameDiffer():
     from jellyfish import jaro_winkler
     from unidecode import unidecode
@@ -223,6 +257,30 @@ def AffiliationNameDiffer():
             return np.nan
 
         sim = jaro_winkler(
+            unidecode(a_row[Authors.IDX_AFF]).lower(),
+            unidecode(pa_row[PaperAuthors.IDX_AFF]).lower()
+        )
+        return sim
+
+    return calculator
+
+
+def AffiliationNameDiffer2():
+    from jellyfish import levenshtein_distance
+    from unidecode import unidecode
+
+    def calculator(aid, pid):
+        a_row = authors.get(aid)
+        pa_row = paper_authors.get(pid, aid)
+
+        if a_row is None or pa_row is None:
+            return np.nan
+
+        if (a_row[Authors.IDX_AFF] == '' or
+                pa_row[PaperAuthors.IDX_AFF]) == '':
+            return np.nan
+
+        sim = levenshtein_distance(
             unidecode(a_row[Authors.IDX_AFF]).lower(),
             unidecode(pa_row[PaperAuthors.IDX_AFF]).lower()
         )
@@ -351,6 +409,14 @@ def PaperNumAuthor():
     def calculator(aid, pid):
         pid_aid_list = paper_authors.get_by_pid(pid)
         return len(pid_aid_list)
+
+    return calculator
+
+
+def AuthorPaperDupNum():
+    def calculator(aid, pid):
+        aid_list = np.array([tu[1] for tu in paper_authors.get_by_pid(pid)])
+        return np.sum(aid_list == aid)
 
     return calculator
 
@@ -645,6 +711,46 @@ def PaperNumKeywords():
     return calculator
 
 
+def PaperAuthorIntersectKeywords():
+    import nltk
+
+    from nltk.corpus import stopwords
+    from unidecode import unidecode
+
+    tokenizer = nltk.tokenize.RegexpTokenizer(r'[\w]{2,}')
+    stopwords_set = set(stopwords.words())
+
+    cache_by_aid = [None, None]
+
+    def calculator(aid, pid):
+        if cache_by_aid[0] == aid:
+            my_keywords = cache_by_aid[1]
+
+        else:
+            my_keywords = []
+
+            for ipid, iaid in paper_authors.get_by_aid(aid):
+                paper = papers.get(ipid)
+                if paper is None:
+                    continue
+                keywords = tokenizer.tokenize(unidecode(paper[Papers.IDX_KEYWORDS]).lower())
+                if not keywords:
+                    continue
+                my_keywords.extend(keywords)
+
+            my_keywords = set(my_keywords)
+
+            cache_by_aid[0] = aid
+            cache_by_aid[1] = my_keywords
+
+        paper = papers.get(pid)
+        keywords = set(tokenizer.tokenize(unidecode(paper[Papers.IDX_KEYWORDS]).lower()))
+
+        return len(my_keywords & keywords)
+
+    return calculator
+
+
 def AuthorAffNumWords():
     import nltk
 
@@ -921,30 +1027,38 @@ def PaperTopicStd():
     return calculator
 
 
+def PublicationNumPaper():
+
+    def calculator(aid, pid):
+        paper = papers.get(pid)
+        if paper is None or paper[Papers.IDX_PUB_ID] is None:
+            return np.nan
+
+        pub_id = paper[Papers.IDX_PUB_ID]
+
+        return len(papers.get_by_pub_id(pub_id))
+
+    return calculator
+
+
 feature_names = []
 
-feature_names.append('BayesAuthorToPaper')  # (1)
+# first feature
+feature_names.append('BayesAuthorToPaper')
+feature_names.append('AuthorNameDiffer')
+feature_names.append('AffiliationNameDiffer')
+feature_names.append('PaperYear')
+feature_names.append('AuthorNumPaper')
+feature_names.append('AuthorPaperNumCoauthor')
 
-feature_names.append('AuthorNameDiffer')  # (1)
-# feature_names.append('AuthorCoauthorNameDiffer')
-feature_names.append('AffiliationNameDiffer')  # (1)
+# second festure
+feature_names.append('PaperNumAuthor')
+feature_names.append('AuthorNumPublication')
+feature_names.append('AuthorPaperTopicSim')
 
-# feature_names.append('AuthorYearMid')
-# feature_names.append('AuthorYearMin')
-# feature_names.append('AuthorYearMax')
-feature_names.append('PaperYear')  # (1)
-
-feature_names.append('AuthorNumPaper')  # (1)
-feature_names.append('PaperNumAuthor')  # (1)
+# third feature
 # feature_names.append('AuthorNumCoauthor')
-# feature_names.append('AuthorMidNumCoauthor')
-# feature_names.append('AuthorMinNumCoauthor')
-# feature_names.append('AuthorMaxNumCoauthor')
-# feature_names.append('AuthorMeanNumCoauthor')
-feature_names.append('AuthorPaperNumCoauthor')  # (1)
-feature_names.append('AuthorNumPublication')  # (1)
-# feature_names.append('AuthorRatioPublicationJournal')
-
+# feature_names.append('AuthorCoauthorNameDiffer'))
 # feature_names.append('AuthorNumTitleWords')
 # feature_names.append('PaperNumTitleWords')
 # feature_names.append('AuthorNumKeywords')
@@ -952,11 +1066,25 @@ feature_names.append('AuthorNumPublication')  # (1)
 # feature_names.append('AuthorAffNumWords')
 # feature_names.append('PaperAffNumWords')
 
-feature_names.append('AuthorPaperTopicSim')  # (1)
+# feature_names.append('AuthorYearMid')
+# feature_names.append('AuthorYearMin')
+# feature_names.append('AuthorYearMax')
+# feature_names.append('AuthorMidNumCoauthor')
+# feature_names.append('AuthorMinNumCoauthor')
+# feature_names.append('AuthorMaxNumCoauthor')
+# feature_names.append('AuthorMeanNumCoauthor')
+# feature_names.append('AuthorRatioPublicationJournal')
 # feature_names.append('AuthorTopicMean')
 # feature_names.append('AuthorTopicStd')
 # feature_names.append('PaperTopicMean')
 # feature_names.append('PaperTopicStd')
+
+# last feature
+feature_names.append('PublicationNumPaper')
+feature_names.append('AuthorPaperDupNum')
+feature_names.append('PaperAuthorIntersectKeywords')
+feature_names.append('AuthorNameFormat')
+feature_names.append('PaperNameFormat')
 
 is_all_cached = True
 
@@ -968,11 +1096,13 @@ for feature_name in feature_names:
         break
 
 # check test features
-for feature_name in feature_names:
-    feature_dump_location = TEST_FEATURE_DB_FOLDER + '/{}.dump'.format(feature_name)
-    if not os.path.isfile(feature_dump_location):
-        is_all_cached = False
-        break
+for filepath in [VALID_FILE, TEST_FILE]:
+    target_feature_db_folder = TARGET_FEATURE_DB_FOLDER + filepath.split('/')[-1]
+    for feature_name in feature_names:
+        feature_dump_location = target_feature_db_folder + '/{}.dump'.format(feature_name)
+        if not os.path.isfile(feature_dump_location):
+            is_all_cached = False
+            break
 
 if is_all_cached:
     print('No need to load metadata')
@@ -987,17 +1117,10 @@ else:
     print('Loading metadata is completed.')
 
 
-def get_feature_extractor(feature_name, feature_mean=None):
+def get_feature_extractor(feature_name):
     extractor_maker = globals()[feature_name]
     extractor = extractor_maker()
-
-    def extractor_wrapper(aid, pid):
-        feature_value = extractor(aid, pid)
-        if np.isnan(feature_value) and feature_mean is not None:
-            return feature_mean
-        return feature_value
-
-    return extractor_wrapper
+    return extractor
 
 
 def make_feature_vector(aid, pid, missing_value_info=None):

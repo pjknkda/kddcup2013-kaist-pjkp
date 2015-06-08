@@ -98,7 +98,7 @@ class Papers(object):
 
     def __init__(self, publications=None, _data=None):
         if _data is not None:
-            self.rows = _data
+            self.rows, self.pub_id_mapping = _data
             return
 
         def _convert_row_JK_MANSE(row):
@@ -108,16 +108,25 @@ class Papers(object):
                 publications.inv_map(row[3], row[4]),
                 row[5]
             ])
-        self.rows = dict(
-            ((row[0], _convert_row_JK_MANSE(row)) for row in readCSV(PAPER_FILE))
-        )
+
+        self.rows = dict()
+        self.pub_id_mapping = collections.defaultdict(list)
+
+        for row in readCSV(PAPER_FILE):
+            new_row = _convert_row_JK_MANSE(row)
+            self.rows[row[0]] = new_row
+
+            self.pub_id_mapping[new_row[self.IDX_PUB_ID]].append(row[0])
 
     @property
     def data(self):
-        return self.rows
+        return (self.rows, self.pub_id_mapping)
 
     def get(self, pid):
         return self.rows.get(pid)
+
+    def get_by_pub_id(self, pub_id):
+        return self.pub_id_mapping[pub_id]
 
 
 class PaperAuthors(object):
